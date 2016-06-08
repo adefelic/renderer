@@ -4,15 +4,27 @@
 #include <iostream>
 
 const TGAColor WHITE = TGAColor(255, 255, 255, 255);
-const TGAColor RED   = TGAColor(255,   0,   0, 255);
+const TGAColor BLUE  = TGAColor(  0,   0, 255, 255);
 const TGAColor GREEN = TGAColor(  0, 255,   0, 255);
+const TGAColor RED   = TGAColor(255,   0,   0, 255);
+const TGAColor TEAL  = TGAColor( 22, 255, 255, 255);
+
 const int HEIGHT = 800;
 const int WIDTH = 800;
+const int DEPTH = 800; // i know this is crazy ... should've just made a scale variable
 enum DRAW_MODE {WIRE, FILL};
 
 // returns a vector of points on the heap
-// this is a memory leak if you don't deal with the deallocate the returned vector :X
-std::vector<Vec3i*> line(int x0, int y0, int x1, int y1, TGAImage &image, TGAColor color) {
+// this is a memory leak if you don't deallocate the returned vector :X
+std::vector<Vec3i*> line(Vec3i &v0, Vec3i &v1, TGAImage &image, TGAColor color) {
+
+  int x0 = v0.x;
+  int y0 = v0.y;
+  int z0 = v0.z;
+  int x1 = v1.x;
+  int y1 = v1.y;
+  int z1 = v1.z;
+  // time to rewrite swapping + transposing so that we're swapping pointers to Vec3s
 
   std::vector<Vec3i*> points;
   bool isTransposed = false;
@@ -70,6 +82,7 @@ std::vector<Vec3i*> line(int x0, int y0, int x1, int y1, TGAImage &image, TGACol
   return points;
 }
 
+// i have a feeling that this will skip the bottom line
 void fill_triangle(std::vector<Vec3i*> &points, TGAImage &image) {
 
   std::vector<Vec3i*> horizontal_points;
@@ -94,12 +107,18 @@ void fill_triangle(std::vector<Vec3i*> &points, TGAImage &image) {
     // if it's not, draw the line, clear the vector, then push the point
     } else {
       std::cout << "draw!" << std::endl;
-      int x0 = horizontal_points.front()->x;
-      int y0 = horizontal_points.front()->y;
-      int x1 = horizontal_points.back()->x;
-      int y1 = horizontal_points.back()->y;
-      std::cout << "we're drawing: (" << x0 << ", " << y0 <<"), (" << x1 << ", " << y1 << ")" << std::endl;
-      line(x0, y0, x1, y1, image, RED);
+      Vec3i v0(
+        horizontal_points.front()->x,
+        horizontal_points.front()->y,
+        horizontal_points.front()->z
+      );
+      Vec3i v1(
+        horizontal_points.back()->x,
+        horizontal_points.back()->y,
+        horizontal_points.back()->z
+      );
+      // std::cout << "we're drawing: (" << x0 << ", " << y0 <<"), (" << x1 << ", " << y1 << ")" << std::endl;
+      line(v0, v1, image, TEAL);
       horizontal_points.clear();
       horizontal_points.push_back(*i);
       previous_y = (*i)->y;
@@ -108,7 +127,13 @@ void fill_triangle(std::vector<Vec3i*> &points, TGAImage &image) {
 }
 
 // this is inefficient, non-edge lines are each drawn twice
+// also i'm ignoring the draw mode
 void draw_object(Model &m, TGAImage &image, TGAColor color, bool z_culling, DRAW_MODE mode ) {
+
+  // let's cull some z
+  // *shotgun pump sound*
+  std::vector<Vec3i> points_seen;
+
   // for each face
   for (int i = 0; i < m.nfaces(); ++i) {
 
@@ -118,20 +143,27 @@ void draw_object(Model &m, TGAImage &image, TGAColor color, bool z_culling, DRAW
     // we'll store three lines of points at a time
     // this is going to allocate some pointers to memory, so we'll have to clear it later
     std::vector<Vec3i*> points_face;
-
     // for each line
     for (int j = 0; j < 3; ++j) {
       Vec3f v0 = m.vert(face[j]);
       Vec3f v1 = m.vert(face[(j+1)%3]);
+
       // add 1 to each point to make all numbers positive, then scale by dimension
-      int x0 = (v0.x+1.0)*WIDTH/2;
-      int y0 = (v0.y+1.0)*HEIGHT/2;
-      int x1 = (v1.x+1.0)*WIDTH/2;
-      int y1 = (v1.y+1.0)*HEIGHT/2;
-      printf("(%d, %d), (%d, %d)\n", x0, y0, x1, y1);
+      Vec3i v0_i(
+        (v0.x+1.0)*WIDTH/2,
+        (v0.y+1.0)*HEIGHT/2,
+        (v0.z+1.0)*DEPTH/2
+      );
+      Vec3i v1_i(
+        (v1.x+1.0)*WIDTH/2,
+        (v1.y+1.0)*HEIGHT/2,
+        (v1.z+1.0)*DEPTH/2
+      );
+
+      printf("(%d, %d, %d), (%d, %d, %d)\n", v0_i.x, v0_i.y, v0_i.z, v1_i.x, v1_i.y, v1_i.z);
       // get and (unnecessarily) draw the triangle's outer lines
       // this should merge the return value of lines() with points' current value
-      std::vector<Vec3i*> points_line = line(x0, y0, x1, y1, image, color);
+      std::vector<Vec3i*> points_line = line(v0_i, v1_i, image, color);
       points_face.insert(points_face.begin(), points_line.begin(), points_line.end());
     }
 
@@ -150,21 +182,6 @@ void draw_object(Model &m, TGAImage &image, TGAColor color, bool z_culling, DRAW
     }
     points_face.clear();
     printf("clear!\n");
-    /*
-      } else {
-        for (int j = 0; j < 3; ++j) {
-          Vec3f v0 = m.vert(face[j]);
-          Vec3f v1 = m.vert(face[(j+1)%3]);
-          // add 1 to each point to make all numbers positive, then scale by dimension
-          int x0 = (v0.x+1.0)*WIDTH/2;
-          int y0 = (v0.y+1.0)*HEIGHT/2;
-          int x1 = (v1.x+1.0)*WIDTH/2;
-          int y1 = (v1.y+1.0)*HEIGHT/2;
-          printf("(%d, %d), (%d, %d)\n", x0, y0, x1, y1);
-          line(x0, y0, x1, y1, image, color);
-        }
-      }
-    */
   } // foreach face
 }
 
