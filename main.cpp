@@ -19,9 +19,9 @@ const TGAColor GREEN = TGAColor(  0, 255,   0, 255);
 const TGAColor RED   = TGAColor(255,   0,   0, 255);
 const TGAColor TEAL  = TGAColor( 22, 255, 255, 255);
 
-const int HEIGHT = 800;
-const int WIDTH = 800;
-const int DEPTH = 800; // i know this is crazy ... should've just made a scale variable
+const int HEIGHT = 1024;
+const int WIDTH  = 1024;
+const int DEPTH  = 1024; // i know this is crazy ... should've just made a scale variable
 enum DRAW_MODE {WIRE, FILL};
 
 // returns a vector of points on the heap
@@ -42,7 +42,7 @@ std::vector<Vec3i*> line(Vec3i *v0, Vec3i *v1, TGAImage &image, TGAColor color, 
   std::vector<Vec3i*> points;
 
   /* DETERMINE Y VALUES FOR EACH X */
-  // heck, looks like i'm going to dubplicate this all at the bottom for (x, z)
+  // heck, looks like i'm going to duplicate this all at the bottom for (x, z)
   bool yTransposed = false;
   // if the rise is greater than the run, transpose
   // we do this before potentially swapping points so that we don't end up un-swapping them
@@ -50,25 +50,25 @@ std::vector<Vec3i*> line(Vec3i *v0, Vec3i *v1, TGAImage &image, TGAColor color, 
     std::swap(x0, y0);
     std::swap(x1, y1);
     yTransposed = true;
-    printf("x + y transposed!\n");
+    //printf("x + y transposed!\n");
   }
 
   // ensure that (x0, y0) is the leftmost point (closest to zero on the positive side)
   if (std::abs(x0) > std::abs(x1)) {
     std::swap(x0, x1);
     std::swap(y0, y1);
-    printf("swapped!\n");
+    //printf("swapped!\n");
   }
 
   int dy = y1 - y0;
   int dx = x1 - x0;
   float slope = (float)dy/(float)dx; // we're preserving the fraction here
-  printf("%f\n", slope);
+  //printf("%f\n", slope);
   float error = 0.0;
 
   // iterate over each x value on the line
   int y = y0;
-  printf("%d -> %d\n", x0, x1);
+  //printf("x0: %d -> x1: %d\n", x0, x1);
   // draw the points, first point is (x0, y0)
   for (int x = x0; x <= x1; x++) {
 
@@ -83,17 +83,17 @@ std::vector<Vec3i*> line(Vec3i *v0, Vec3i *v1, TGAImage &image, TGAColor color, 
       y_to_draw = y;
     }
 
-/*
-    // break early if we've already drawn a point with a higher z value
-    Vec2i z_key(x_to_draw, y_to_draw);
-    if (z_values.count(z_key) != 0) {
-      if (z_values.at(z_key) < z){
-        // code
-      }
-    } else {
-      // found
-    }
-*/
+    /*
+        // break early if we've already drawn a point with a higher z value
+        Vec2i z_key(x_to_draw, y_to_draw);
+        if (z_values.count(z_key) != 0) {
+          if (z_values.at(z_key) < z){
+            // code
+          }
+        } else {
+          // found
+        }
+    */
     // record the point, maybe draw
     Vec3i *point = new Vec3i(x_to_draw, y_to_draw, 0);
     points.push_back(point);
@@ -117,30 +117,33 @@ std::vector<Vec3i*> line(Vec3i *v0, Vec3i *v1, TGAImage &image, TGAColor color, 
 
 // i have a feeling that this will skip the bottom line
 // points = triangle edge points
-void draw_triangle(std::vector<Vec3i*> &points, TGAImage &image, std::map<Vec2i, int> &z_values) {
+// the bug here could be from there not being pairs on the stack
+void draw_triangle(std::vector<Vec3i*> &points, TGAImage &image, TGAColor color, std::map<Vec2i, int> &z_values) {
 
+  // this vector is for tracking points on the same y
   std::vector<Vec3i*> horizontal_points;
   int previous_y;
+  std::cout << "let's draw a triangle" << std::endl;
   for (std::vector<Vec3i*>::iterator i = points.begin(); i != points.end(); ++i) {
 
-    // first point of the face
+    // push the first point of the face
     if (i == points.begin()) {
-      std::cout << "continue!" << std::endl;
       horizontal_points.push_back(*i);
       previous_y = (*i)->y;
       continue;
     }
 
-    std::cout << (*i)->x << ", " << (*i)->y << std::endl;
-    std::cout << (*i)->y << previous_y << std::endl;
     // if the current point is on the same y, push it
     if ((*i)->y == previous_y) {
-      std::cout << "push!" << std::endl;
       horizontal_points.push_back(*i);
-
-    // if it's not, draw the line, clear the vector, then push the point
     } else {
-      std::cout << "draw!" << std::endl;
+      // if it's not, draw the line, clear the vector, then push the point
+      // make sure the points are sorted by x
+      std::sort(
+        horizontal_points.begin(),
+        horizontal_points.end(),
+        [] (Vec3i *a, Vec3i *b) { return a->x < b->x; }
+      );
       Vec3i v0(
         horizontal_points.front()->x,
         horizontal_points.front()->y,
@@ -151,11 +154,11 @@ void draw_triangle(std::vector<Vec3i*> &points, TGAImage &image, std::map<Vec2i,
         horizontal_points.back()->y,
         horizontal_points.back()->z
       );
-      // std::cout << "we're drawing: (" << x0 << ", " << y0 <<"), (" << x1 << ", " << y1 << ")" << std::endl;
       // draw + fill
-      line(&v0, &v1, image, TEAL, z_values, true);
-      horizontal_points.clear();
-      horizontal_points.push_back(*i);
+      std::cout << "drawing line at y=" << v0.y << std::endl;
+      line(&v0, &v1, image, color, z_values, true);
+      horizontal_points.clear(); // forget lines without partners
+      horizontal_points.push_back(*i); // start the vec anew, with a new y
       previous_y = (*i)->y;
     }
   }
@@ -195,7 +198,7 @@ void draw_object(Model &m, TGAImage &image, TGAColor color, bool z_culling, DRAW
         (v1.y+1.0)*HEIGHT/2,
         (v1.z+1.0)*DEPTH/2
       );
-      printf("Normalized outline vertices: (%d, %d, %d), (%d, %d, %d)\n", v0_i.x, v0_i.y, v0_i.z, v1_i.x, v1_i.y, v1_i.z);
+      //printf("Normalized outline vertices: (%d, %d, %d), (%d, %d, %d)\n", v0_i.x, v0_i.y, v0_i.z, v1_i.x, v1_i.y, v1_i.z);
 
       // if we're not filling the triangles, we will just draw their outlines and leave
       if (mode == WIRE) {
@@ -215,14 +218,17 @@ void draw_object(Model &m, TGAImage &image, TGAColor color, bool z_culling, DRAW
       points_face.end(),
       [] (Vec3i *a, Vec3i *b) { return a->y < b->y; }
     );
-    draw_triangle(points_face, image, z_values);
+    std::cout << "sorted edge vertices:" << std::endl;
+    for (std::vector<Vec3i*>::iterator j = points_face.begin(); j != points_face.end(); ++j) {
+      printf("(%d, %d, %d)\n", (*j)->x, (*j)->y, (*j)->z);
+    }
+    draw_triangle(points_face, image, TGAColor(rand()%255, rand()%255, rand()%255, 255), z_values);
 
     // deallocate memory
-    for (std::vector<Vec3i*>::iterator it = points_face.begin() ; it != points_face.end(); ++it) {
+    for (std::vector<Vec3i*>::iterator it = points_face.begin(); it != points_face.end(); ++it) {
       delete (*it);
     }
     points_face.clear();
-    printf("clear!\n");
   } // foreach face
 }
 
