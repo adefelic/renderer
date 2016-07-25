@@ -252,9 +252,9 @@ Vec3f barycentric(Vec2i p, Vec3f v0, Vec3f v1, Vec3f v2) {
 	return Vec3f( (1-x/z-y/z), x/z, y/z);
 }
 
+// convert from world coordinates to screen coordinates
 float normalize(float f) {
 	return (f+1.0)*SCALE/2;
-	return f;
 }
 
 // find the bounding box, draw the triangle
@@ -266,10 +266,10 @@ void draw_triangle(Vec3f v0, Vec3f v1, Vec3f v2, TGAImage &image, TGAColor color
 	std::vector<float> y_extrema = {v0.y, v1.y, v2.y};
 
 	// this is turning our floats into ints. not sure if i want to do this here?
-	int x_max = *max_element(x_extrema.begin(), x_extrema.end());
-	int x_min = *min_element(x_extrema.begin(), x_extrema.end());
-	int y_max = *max_element(y_extrema.begin(), y_extrema.end());
-	int y_min = *min_element(y_extrema.begin(), y_extrema.end());
+	int x_max = std::round(*max_element(x_extrema.begin(), x_extrema.end()));
+	int x_min = std::round(*min_element(x_extrema.begin(), x_extrema.end()));
+	int y_max = std::round(*max_element(y_extrema.begin(), y_extrema.end()));
+	int y_min = std::round(*min_element(y_extrema.begin(), y_extrema.end()));
 
 	// iterate over each point in the bounding box
 	for (int x = x_min; x < x_max; ++x) {
