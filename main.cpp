@@ -25,14 +25,12 @@ enum DRAW_MODE {WIRE, FILL};
 
 // returns a vector of points on the heap
 // this is a memory leak if you don't deallocate the returned vector :X
-// a fact: this is the only function that calls image.set()
-std::vector<Vec3i*> line(Vec2i *v0, Vec2i *v1, TGAImage &image, TGAColor color, std::map<Vec2i, int> &z_values, bool draw) {
+std::vector<Vec3i*> line(Vec2i v0, Vec2i v1, TGAImage &image, TGAColor color, bool draw) {
 
-
-	int x0 = v0->x;
-	int y0 = v0->y;
-	int x1 = v1->x;
-	int y1 = v1->y;
+	int x0 = v0.x;
+	int y0 = v0.y;
+	int x1 = v1.x;
+	int y1 = v1.y;
 
 	// this vector will hold the points that make up the line. we'll be returning it.
 	std::vector<Vec3i*> points;
@@ -96,124 +94,32 @@ std::vector<Vec3i*> line(Vec2i *v0, Vec2i *v1, TGAImage &image, TGAColor color, 
 	return points;
 }
 
-/*
-	// i have a feeling that this will skip the bottom line
-	// points = triangle edge points
-	// the bug here could be from there not being pairs on the stack
-	void draw_triangle(std::vector<Vec3i*> &points, TGAImage &image, TGAColor color, std::map<Vec2i, int> &z_values) {
+// find the magnitude of the vector ab
+// assumes R3
+double vector_magnitude(Vec3f a, Vec3f b) {
+	return sqrt( pow(b.x-a.x, 2) + pow(b.y-a.y, 2) + pow(b.z-a.z, 2) );
+}
 
-		// this vector is for tracking points on the same y
-		std::vector<Vec3i*> horizontal_points;
-		int previous_y;
-		std::cout << "let's draw a triangle" << std::endl;
-		for (std::vector<Vec3i*>::iterator i = points.begin(); i != points.end(); ++i) {
+Vec3f cross_product(Vec3f a, Vec3f b) {
+	return Vec3f(
+		a.y*b.z - a.z*b.y,
+		a.z*b.x - a.x*b.z,
+		a.x*b.y - a.y*b.x
+	);
+}
 
-			// push the first point of the face
-			if (i == points.begin()) {
-				horizontal_points.push_back(*i);
-				previous_y = (*i)->y;
-				continue;
-			}
+// assumes we're in R3
+double dot_product(Vec3f a, Vec3f b) {
+	return a.x * b.x + a.y * b.y + a.z * b.z;
+}
 
-			// if the current point is on the same y, push it
-			if ((*i)->y == previous_y) {
-				horizontal_points.push_back(*i);
-			} else {
-				// if it's not, draw the line, clear the vector, then push the point
-				// make sure the points are sorted by x
-				std::sort(
-					horizontal_points.begin(),
-					horizontal_points.end(),
-					[] (Vec3i *a, Vec3i *b) { return a->x < b->x; }
-				);
-				Vec3i v0(
-					horizontal_points.front()->x,
-					horizontal_points.front()->y,
-					horizontal_points.front()->z
-				);
-				Vec3i v1(
-					horizontal_points.back()->x,
-					horizontal_points.back()->y,
-					horizontal_points.back()->z
-				);
-				// draw + fill
-				std::cout << "drawing line at y=" << v0.y << std::endl;
-				line(&v0, &v1, image, color, z_values, true);
-				horizontal_points.clear(); // forget lines without partners
-				horizontal_points.push_back(*i); // start the vec anew, with a new y
-				previous_y = (*i)->y;
-			}
-		}
-	}
-
-	// this is inefficient, non-edge lines are each drawn twice
-	// also i'm ignoring the draw mode
-	void draw_object(Model &m, TGAImage &image, TGAColor color, bool z_culling, DRAW_MODE mode) {
-
-		// let's cull some z
-		// *shotgun pump sound*
-		std::map<Vec2i, int> z_values;
-
-		// for each of the object's faces
-		for (int i = 0; i < m.nfaces(); ++i) {
-
-			// a face is a vector of ints, copy it
-			std::vector<int> face = m.face(i);
-			// we'll store three lines of points at a time
-			// this is going to allocate some pointers to memory, so we'll have to clear it later
-			std::vector<Vec3i*> points_face;
-
-			// for each line of the face's three lines
-			for (int j = 0; j < 3; ++j) {
-
-				// NORMALIZE POINTS
-				Vec3f v0 = m.vert(face[j]);
-				Vec3f v1 = m.vert(face[(j+1)%3]);
-				// add 1 to each point to make all numbers positive, then scale by dimension
-				Vec3i v0_i(
-					(v0.x+1.0)*WIDTH/2,
-					(v0.y+1.0)*HEIGHT/2,
-					(v0.z+1.0)*DEPTH/2
-				);
-				Vec3i v1_i(
-					(v1.x+1.0)*WIDTH/2,
-					(v1.y+1.0)*HEIGHT/2,
-					(v1.z+1.0)*DEPTH/2
-				);
-
-				// if we're not filling the triangles, we will just draw their outlines and leave
-				if (mode == WIRE) {
-					line(&v0_i, &v1_i, image, color, z_values, true);
-				} else {
-					// get the points of the triangle's outer lines, but don't waste time drawing them
-					std::vector<Vec3i*> points_line = line(&v0_i, &v1_i, image, color, z_values, false);
-					// merge the face's outline vertices with our running collection of face outline vertices
-					points_face.insert(points_face.begin(), points_line.begin(), points_line.end());
-				}
-			}
-
-			// we have all of the outer points of the triangle
-			// sort the points by y value (with a lambda)
-			std::sort(
-				points_face.begin(),
-				points_face.end(),
-				[] (Vec3i *a, Vec3i *b) { return a->y < b->y; }
-			);
-			std::cout << "sorted edge vertices:" << std::endl;
-			for (std::vector<Vec3i*>::iterator j = points_face.begin(); j != points_face.end(); ++j) {
-				printf("(%d, %d, %d)\n", (*j)->x, (*j)->y, (*j)->z);
-			}
-			// draw the triangle naively
-			draw_triangle(points_face, image, TGAColor(rand()%255, rand()%255, rand()%255, 255), z_values);
-
-			// deallocate memory
-			for (std::vector<Vec3i*>::iterator it = points_face.begin(); it != points_face.end(); ++it) {
-				delete (*it);
-			}
-			points_face.clear();
-		} // foreach face
-	}
-*/
+// returns normal vector originating at a
+Vec3f get_normal(Vec3f a, Vec3f b, Vec3f c) {
+	// derive two vectors from our three vertices
+	Vec3f ab(b.x-a.x, b.y-a.y, b.z-a.z);
+	Vec3f ac(c.x-a.x, c.y-a.y, c.z-a.z);
+	return cross_product(ab, ac);
+}
 
 /*
  * returns barycentric coordinates (u, v, 1) of point P in triangle v0v1v2
@@ -222,34 +128,18 @@ std::vector<Vec3i*> line(Vec2i *v0, Vec2i *v1, TGAImage &image, TGAColor color, 
 Vec3f barycentric(Vec2i p, Vec3f v0, Vec3f v1, Vec3f v2) {
 
 	// we could pre-compute the first two values of each vector
-	// [(v2.x-v0.x) (v2.x-v1.x) (p.x-v2.x)]
+	// a = [(v2.x-v0.x) (v2.x-v1.x) (p.x-v2.x)]
 	// X
-	// [(v2.y-v0.y) (v2.y-v1.y) (p.y-v2.y)]
-	float Ax = (v2.x-v0.x);
-	float Ay = (v2.y-v0.y);
-	float Bx = (v2.x-v1.x);
-	float By = (v2.y-v1.y);
-	float Cx = (p.x-v2.x);
-	float Cy = (p.y-v2.y);
-		/*
-		float Ax = (v2.x-v0.x);
-		float Ay = (v2.y-v0.y);
-		float Bx = (v1.x-v0.x);
-		float By = (v1.y-v0.y);
-		float Cx = (v0.x-p.x);
-		float Cy = (v0.y-p.y);
-		*/
-	float x = (Bx*Cy) - (By*Cx);
-	float y = (Cx*Ay) - (Cy*Ax);
-	float z = (Ax*By) - (Ay*Bx);
-	//printf("triangle: (%f,%f),(%f,%f),(%f,%f)\n", v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
-	//printf("point:    (%i,%i)\n", p.x, p.y);
-	//printf("cross: %f %f %f\n", x, y, z);
+	// b = [(v2.y-v0.y) (v2.y-v1.y) (p.y-v2.y)]
+	// =
+	// c
+	Vec3f a(v2.x-v0.x, v2.x-v1.x, p.x-v2.x);
+	Vec3f b(v2.y-v0.y, v2.y-v1.y, p.y-v2.y);
+	Vec3f c(cross_product(a, b));
+
 	// the cross product vec = (u, v, 1), so now i have to transform it so that z actually equals 1
-	// let's return (1-u-v), u, v
-	//printf("u, v: %f, %f\n", x/z, y/z);
-	if (std::abs(z) < 1) return Vec3f(-1, -1, -1); // degenerate triangle
-	return Vec3f( (1-x/z-y/z), x/z, y/z);
+	// let's return the vector: ( (1-u-v), u, v )
+	return Vec3f( (1 - c.x/c.z - c.y/c.z), c.x/c.z, c.y/c.z);
 }
 
 // convert from world coordinates to screen coordinates
@@ -257,13 +147,39 @@ float normalize(float f) {
 	return (f+1.0)*SCALE/2;
 }
 
-// find the bounding box, draw the triangle
-void draw_triangle(Vec3f v0, Vec3f v1, Vec3f v2, TGAImage &image, TGAColor color) {
+// calculate the RGBA color for triangle abc
+TGAColor get_color(Vec3f a, Vec3f b, Vec3f c, TGAImage &image) {
+	// unit vector describing directional light
+	Vec3f light_source(0, 0, 1);
+	// gotta find the angle between the light source and a normal of the triangle
+	// find the triangle's normal, originating at point a
+	Vec3f n = get_normal(a, b, c);
+
+	// now find the angle between the directional light and the normal
+	// we should make the normal into a unit vector
+	Vec3f unit_normal(
+		n.x - a.x,
+		n.y - a.y,
+		n.z - a.z
+	);
+	// here we get the cosine of theta
+	double cos_theta = dot_product(unit_normal, light_source) / vector_magnitude(unit_normal, Vec3f(0,0,0)) * vector_magnitude(light_source, Vec3f(0,0,0));
+	// we're finding the square root just to make the color shifts a little bit less extreme
+	double brightness = 255 * sqrt(cos_theta);
+
+	// degenerate triangles are getting a brightness of 0
+	if (brightness < 0) brightness = 0;
+
+	return TGAColor(brightness, brightness, brightness, 255);
+}
+
+// draw the triangle described by vertices a b c onto the passed TGAImage
+void draw_triangle(Vec3f a, Vec3f b, Vec3f c, TGAImage &image) {
 
 	// of the triangle's corner vertices, find the maxes and mins of x and y.
 	// those describe the bounding box
-	std::vector<float> x_extrema = {v0.x, v1.x, v2.x};
-	std::vector<float> y_extrema = {v0.y, v1.y, v2.y};
+	std::vector<float> x_extrema = {a.x, b.x, c.x};
+	std::vector<float> y_extrema = {a.y, b.y, c.y};
 
 	// this is turning our floats into ints. not sure if i want to do this here?
 	int x_max = std::round(*max_element(x_extrema.begin(), x_extrema.end()));
@@ -271,18 +187,20 @@ void draw_triangle(Vec3f v0, Vec3f v1, Vec3f v2, TGAImage &image, TGAColor color
 	int y_max = std::round(*max_element(y_extrema.begin(), y_extrema.end()));
 	int y_min = std::round(*min_element(y_extrema.begin(), y_extrema.end()));
 
+	TGAColor color = get_color(a, b, c, image);
+
+	// if there is no light, we don't need to draw the triangle at all
+	if (color.r <= 0) return;
+
 	// iterate over each point in the bounding box
-	for (int x = x_min; x < x_max; ++x) {
-		for (int y = y_min; y < y_max; ++y) {
+	for (int x = x_min; x < x_max + 1; ++x) {
+		for (int y = y_min; y < y_max + 1; ++y) {
 			Vec2i point(x, y);
-			//image.set(x, y, WHITE);
-			Vec3f u_v_1 = barycentric(point, v0, v1, v2);
-			//printf("point:    (%i,%i)\n", x, y);
-			//printf("bary : %f %f %f\n", u_v_1.x, u_v_1.y, u_v_1.z);
-			//std::cout << u_v_1.x << u_v_1.y << u_v_1.z << std::endl;
-			//std::cout << u_v_1.x + u_v_1.y + u_v_1.z << std::endl;
+			// find the barycentric weight of each point in the bounding box
+			Vec3f u_v_1 = barycentric(point, a, b, c);
+			// if any of those barycentric weights is less 0, then the point isn't in the triangle
 			if (!(u_v_1.x < 0 || u_v_1.y < 0 || u_v_1.z < 0)) {
-				//printf("bary : %f %f %f\n", u_v_1.x, u_v_1.y, u_v_1.z);
+				// draw the point if it's in the triangle
 				image.set(x, y, color);
 			}
 		}
@@ -292,7 +210,7 @@ void draw_triangle(Vec3f v0, Vec3f v1, Vec3f v2, TGAImage &image, TGAColor color
 void draw_object(Model &m, TGAImage &image) {
 	// for each of the object's faces (each triangle)
 	for (int i = 0; i < m.nfaces(); ++i) {
-		TGAColor color(rand()%255, rand()%255, rand()%255, 255);
+		//TGAColor color(rand()%255, rand()%255, rand()%255, 255);
 
 		// a face is a vector of ints, copy it and SWIPE ITS VECS
 		std::vector<int> face = m.face(i);
@@ -315,7 +233,7 @@ void draw_object(Model &m, TGAImage &image) {
 			normalize(m.vert(face[2]).z)
 		);
 
-		draw_triangle(v0_n, v1_n, v2_n, image, color);
+		draw_triangle(v0_n, v1_n, v2_n, image);
 
 	}
 }
@@ -333,7 +251,7 @@ int main(int argc, char* argv[]) {
 	TGAImage image(WIDTH, HEIGHT, TGAImage::RGB);
 	Model model("./african_head.obj");
 	draw_object(model, image);
-	//draw_triangle(Vec3f(10,10,0), Vec3f(100,30,0), Vec3f(190,160,0), image, RED);
+	//draw_triangle(Vec3f(1,0,1), Vec3f(3,0,3), Vec3f(4,0,4), image );
 	image.flip_vertically(); // i want to have the origin at the left bottom corner of the image
 	image.write_tga_file("output.tga");
 	return 0;
