@@ -21,8 +21,6 @@ const int SCALE  = 1024;
 const int WIDTH  = 1024;
 const int HEIGHT = 1024;
 
-enum DRAW_MODE {WIRE, FILL};
-
 // draws a line. returns a vector of points
 std::vector<Vec3i*> line(Vec2i v0, Vec2i v1, TGAImage &image, TGAColor color, bool draw) {
 
@@ -154,19 +152,20 @@ Vec3f normalize(Vec3f triangle) {
 
 // calculate the RGBA color for triangle abc
 TGAColor get_color(Vec3f a, Vec3f b, Vec3f c) {
-	// unit vector describing directional light
+
+	// vector describing directional light source
 	Vec3f light_source(0, 0, 1);
+
 	// gotta find the angle between the light source and a normal of the triangle
-	// find the triangle's normal, originating at point a
 	Vec3f n = get_normal(a, b, c);
 
 	// now find the angle between the directional light and the normal (theta from here forwards)
 	double cos_theta = dot_product(n, light_source) / vector_magnitude(n, Vec3f(0,0,0)) * vector_magnitude(light_source, Vec3f(0,0,0));
 
 	double brightness = 255 * cos_theta;
-	double alpha = 255;
+	double alpha;
 	// triangles that aren't getting hit by light get an alpha of 0
-	if (brightness < 0) alpha = 0;
+	(brightness < 0) ? alpha = 0 : alpha = 255;
 
 	return TGAColor(brightness, brightness, brightness, alpha);
 }
@@ -185,7 +184,6 @@ void draw_triangle(Vec3f a, Vec3f b, Vec3f c, TGAColor color, TGAImage &image) {
 	int y_max = std::round(*max_element(y_extrema.begin(), y_extrema.end()));
 	int y_min = std::round(*min_element(y_extrema.begin(), y_extrema.end()));
 
-
 	// if there is no light, we don't need to draw the triangle at all
 	if (color.a <= 0) return;
 
@@ -194,9 +192,9 @@ void draw_triangle(Vec3f a, Vec3f b, Vec3f c, TGAColor color, TGAImage &image) {
 		for (int y = y_min; y < y_max + 1; ++y) {
 			Vec2i point(x, y);
 			// find the barycentric weight of each point in the bounding box
-			Vec3f u_v_1 = barycentric(point, a, b, c);
+			Vec3f u_v_w = barycentric(point, a, b, c);
 			// if any of those barycentric weights is less 0, then the point isn't in the triangle
-			if (!(u_v_1.x < 0 || u_v_1.y < 0 || u_v_1.z < 0)) {
+			if (!(u_v_w.x < 0 || u_v_w.y < 0 || u_v_w.z < 0)) {
 				// draw the point if it's in the triangle
 				image.set(x, y, color);
 			}
@@ -231,20 +229,11 @@ void draw_object(Model &m, TGAImage &image) {
 	}
 }
 
-// [executable] wire
-//   - draws wireframe instead of fill
 int main(int argc, char* argv[]) {
-
-	// parse args
-	DRAW_MODE mode = FILL;
-	if (argc > 1) {
-		if (strncmp(argv[1], "wire", 4) == 0) mode = WIRE;
-	}
 
 	TGAImage image(WIDTH, HEIGHT, TGAImage::RGB);
 	Model model("./african_head.obj");
 	draw_object(model, image);
-	//draw_triangle(Vec3f(1,0,1), Vec3f(3,0,3), Vec3f(4,0,4), image );
 	image.flip_vertically(); // i want to have the origin at the left bottom corner of the image
 	image.write_tga_file("output.tga");
 	return 0;
