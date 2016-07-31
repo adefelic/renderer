@@ -23,8 +23,7 @@ const int HEIGHT = 1024;
 
 enum DRAW_MODE {WIRE, FILL};
 
-// returns a vector of points on the heap
-// this is a memory leak if you don't deallocate the returned vector :X
+// draws a line. returns a vector of points
 std::vector<Vec3i*> line(Vec2i v0, Vec2i v1, TGAImage &image, TGAColor color, bool draw) {
 
 	int x0 = v0.x;
@@ -116,6 +115,7 @@ double dot_product(Vec3f a, Vec3f b) {
 // returns normal vector originating at a
 Vec3f get_normal(Vec3f a, Vec3f b, Vec3f c) {
 	// derive two vectors from our three vertices
+	// the vectors are arbitrary
 	Vec3f ab(b.x-a.x, b.y-a.y, b.z-a.z);
 	Vec3f ac(c.x-a.x, c.y-a.y, c.z-a.z);
 	return cross_product(ab, ac);
@@ -143,38 +143,36 @@ Vec3f barycentric(Vec2i p, Vec3f v0, Vec3f v1, Vec3f v2) {
 }
 
 // convert from world coordinates to screen coordinates
-float normalize(float f) {
-	return (f+1.0)*SCALE/2;
+// add 1 to each point to make all numbers positive, then scale by dimension
+Vec3f normalize(Vec3f triangle) {
+	return Vec3f(
+		(triangle.x+1.0)*SCALE/2,
+		(triangle.y+1.0)*SCALE/2,
+		(triangle.z+1.0)*SCALE/2
+	);
 }
 
 // calculate the RGBA color for triangle abc
-TGAColor get_color(Vec3f a, Vec3f b, Vec3f c, TGAImage &image) {
+TGAColor get_color(Vec3f a, Vec3f b, Vec3f c) {
 	// unit vector describing directional light
 	Vec3f light_source(0, 0, 1);
 	// gotta find the angle between the light source and a normal of the triangle
 	// find the triangle's normal, originating at point a
 	Vec3f n = get_normal(a, b, c);
 
-	// now find the angle between the directional light and the normal
-	// we should make the normal into a unit vector
-	Vec3f unit_normal(
-		n.x - a.x,
-		n.y - a.y,
-		n.z - a.z
-	);
-	// here we get the cosine of theta
-	double cos_theta = dot_product(unit_normal, light_source) / vector_magnitude(unit_normal, Vec3f(0,0,0)) * vector_magnitude(light_source, Vec3f(0,0,0));
-	// we're finding the square root just to make the color shifts a little bit less extreme
-	double brightness = 255 * sqrt(cos_theta);
+	// now find the angle between the directional light and the normal (theta from here forwards)
+	double cos_theta = dot_product(n, light_source) / vector_magnitude(n, Vec3f(0,0,0)) * vector_magnitude(light_source, Vec3f(0,0,0));
 
-	// degenerate triangles are getting a brightness of 0
-	if (brightness < 0) brightness = 0;
+	double brightness = 255 * cos_theta;
+	double alpha = 255;
+	// triangles that aren't getting hit by light get an alpha of 0
+	if (brightness < 0) alpha = 0;
 
-	return TGAColor(brightness, brightness, brightness, 255);
+	return TGAColor(brightness, brightness, brightness, alpha);
 }
 
 // draw the triangle described by vertices a b c onto the passed TGAImage
-void draw_triangle(Vec3f a, Vec3f b, Vec3f c, TGAImage &image) {
+void draw_triangle(Vec3f a, Vec3f b, Vec3f c, TGAColor color, TGAImage &image) {
 
 	// of the triangle's corner vertices, find the maxes and mins of x and y.
 	// those describe the bounding box
@@ -187,10 +185,9 @@ void draw_triangle(Vec3f a, Vec3f b, Vec3f c, TGAImage &image) {
 	int y_max = std::round(*max_element(y_extrema.begin(), y_extrema.end()));
 	int y_min = std::round(*min_element(y_extrema.begin(), y_extrema.end()));
 
-	TGAColor color = get_color(a, b, c, image);
 
 	// if there is no light, we don't need to draw the triangle at all
-	if (color.r <= 0) return;
+	if (color.a <= 0) return;
 
 	// iterate over each point in the bounding box
 	for (int x = x_min; x < x_max + 1; ++x) {
@@ -210,31 +207,27 @@ void draw_triangle(Vec3f a, Vec3f b, Vec3f c, TGAImage &image) {
 void draw_object(Model &m, TGAImage &image) {
 	// for each of the object's faces (each triangle)
 	for (int i = 0; i < m.nfaces(); ++i) {
-		//TGAColor color(rand()%255, rand()%255, rand()%255, 255);
 
 		// a face is a vector of ints, copy it and SWIPE ITS VECS
 		std::vector<int> face = m.face(i);
 
-		// normalize!
-		// add 1 to each point to make all numbers positive, then scale by dimension
-		Vec3f v0_n(
-			normalize(m.vert(face[0]).x),
-			normalize(m.vert(face[0]).y),
-			normalize(m.vert(face[0]).z)
-		);
-		Vec3f v1_n(
-			normalize(m.vert(face[1]).x),
-			normalize(m.vert(face[1]).y),
-			normalize(m.vert(face[1]).z)
-		);
-		Vec3f v2_n(
-			normalize(m.vert(face[2]).x),
-			normalize(m.vert(face[2]).y),
-			normalize(m.vert(face[2]).z)
-		);
+		// store raw triangle vertices in an array
+		Vec3f triangle[3];
+		for (int i = 0; i < 3; ++i) {
+			triangle[i] = Vec3f(
+				m.vert(face[i]).x,
+				m.vert(face[i]).y,
+				m.vert(face[i]).z
+			);
+		}
+		// get the face's color
+		TGAColor face_color = get_color(triangle[0], triangle[1], triangle[2]);
 
-		draw_triangle(v0_n, v1_n, v2_n, image);
-
+		// normalize vertices to screen coordinates
+		for (int i = 0; i < 3; ++i) {
+			triangle[i] = normalize(triangle[i]);
+		}
+		draw_triangle(triangle[0], triangle[1], triangle[2], face_color, image);
 	}
 }
 
