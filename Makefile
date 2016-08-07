@@ -1,5 +1,5 @@
 SYSCONF_LINK = g++
-CPPFLAGS     = -std=c++11 
+CPPFLAGS     = -std=c++11
 LDFLAGS      =
 LIBS         = -stdlib=libc++
 
@@ -19,5 +19,5 @@ $(OBJECTS): %.o: %.cpp
 clean:
 	-rm -f $(OBJECTS)
 	-rm -f $(TARGET)
-	-rm -f *.tga
+	#-rm -f *.tga
 
