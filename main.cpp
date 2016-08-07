@@ -2,6 +2,8 @@
  * a simple renderer
  * - adam defelice
  *
+ * from lessons at https://github.com/ssloy/tinyrenderer
+ *
  */
 
 #include "tgaimage.h"
@@ -20,76 +22,6 @@ const TGAColor TEAL  = TGAColor( 22, 255, 255, 255);
 const int SCALE  = 1024;
 const int WIDTH  = 1024;
 const int HEIGHT = 1024;
-
-// draws a line. returns a vector of points
-std::vector<Vec3i*> line(Vec2i v0, Vec2i v1, TGAImage &image, TGAColor color, bool draw) {
-
-	int x0 = v0.x;
-	int y0 = v0.y;
-	int x1 = v1.x;
-	int y1 = v1.y;
-
-	// this vector will hold the points that make up the line. we'll be returning it.
-	std::vector<Vec3i*> points;
-
-	/* DETERMINE Y VALUES FOR EACH X */
-	bool yTransposed = false;
-	// if the rise is greater than the run, transpose
-	// we do this before potentially swapping points so that we don't end up un-swapping them
-	if (std::abs(y1 - y0) > std::abs(x1 - x0)) {
-		std::swap(x0, y0);
-		std::swap(x1, y1);
-		yTransposed = true;
-	}
-
-	// ensure that (x0, y0) is the leftmost point (closest to zero on the positive side)
-	if (std::abs(x0) > std::abs(x1)) {
-		std::swap(x0, x1);
-		std::swap(y0, y1);
-	}
-
-	int dy = y1 - y0;
-	int dx = x1 - x0;
-	float slope = (float)dy/(float)dx; // we're preserving the fraction here
-	float error = 0.0;
-
-	// iterate over each x value on the line
-	int y = y0;
-	//printf("x0: %d -> x1: %d\n", x0, x1);
-	// draw the points, first point is (x0, y0)
-	for (int x = x0; x <= x1; x++) {
-
-		// handle transposition
-		int x_to_draw;
-		int y_to_draw;
-		if (yTransposed) {
-			x_to_draw = y;
-			y_to_draw = x;
-		} else {
-			x_to_draw = x;
-			y_to_draw = y;
-		}
-
-		// record the point, maybe draw
-		Vec3i *point = new Vec3i(x_to_draw, y_to_draw, 0);
-		points.push_back(point);
-		if (draw) image.set(x_to_draw, y_to_draw, color);
-
-		// add overflow for the next point
-		// TODO? the offset can only ever deliver 1 y of error per x
-		error += slope;
-		if (error >= 1.0) {
-			error--;
-			y++;
-		} else if (error <= -1.0) {
-			error++;
-			y--;
-		}
-	}
-
-	printf("\n");
-	return points;
-}
 
 // find the magnitude of the vector ab
 // assumes R3
@@ -171,8 +103,9 @@ TGAColor get_color(Vec3f a, Vec3f b, Vec3f c) {
 }
 
 // draw the triangle described by vertices a b c onto the passed TGAImage
-void draw_triangle(Vec3f a, Vec3f b, Vec3f c, TGAColor color, TGAImage &image) {
+void draw_triangle(Vec3f a, Vec3f b, Vec3f c, TGAColor color, TGAImage &image, double *zbuffer) {
 
+	Vec3f vertices[3] = {a, b, c};
 	// of the triangle's corner vertices, find the maxes and mins of x and y.
 	// those describe the bounding box
 	std::vector<float> x_extrema = {a.x, b.x, c.x};
@@ -192,17 +125,33 @@ void draw_triangle(Vec3f a, Vec3f b, Vec3f c, TGAColor color, TGAImage &image) {
 		for (int y = y_min; y < y_max + 1; ++y) {
 			Vec2i point(x, y);
 			// find the barycentric weight of each point in the bounding box
-			Vec3f u_v_w = barycentric(point, a, b, c);
+			Vec3f barycentric_weights = barycentric(point, a, b, c);
 			// if any of those barycentric weights is less 0, then the point isn't in the triangle
-			if (!(u_v_w.x < 0 || u_v_w.y < 0 || u_v_w.z < 0)) {
-				// draw the point if it's in the triangle
-				image.set(x, y, color);
+			if (!(barycentric_weights.x < 0 || barycentric_weights.y < 0 || barycentric_weights.z < 0)) {
+				// draw the point if it's in the triangle & is of the lowest z value we've encountered
+				// so lazy
+				double z = 0;
+				z += vertices[0].z * barycentric_weights.x;
+				z += vertices[1].z * barycentric_weights.y;
+				z += vertices[2].z * barycentric_weights.z;
+				if (zbuffer[x + y * WIDTH] < z) {
+					zbuffer[x + y * WIDTH] = z;
+					image.set(x, y, color);
+				}
 			}
 		}
 	}
 }
 
 void draw_object(Model &m, TGAImage &image) {
+
+	// init our z buffer
+	// it'll be using screen coordinates
+  double *zbuffer = new double[WIDTH * HEIGHT];
+	for (int i=0; i<WIDTH*HEIGHT; i++) {
+		zbuffer[i] = 0;
+	}
+
 	// for each of the object's faces (each triangle)
 	for (int i = 0; i < m.nfaces(); ++i) {
 
@@ -221,20 +170,24 @@ void draw_object(Model &m, TGAImage &image) {
 		// get the face's color
 		TGAColor face_color = get_color(triangle[0], triangle[1], triangle[2]);
 
-		// normalize vertices to screen coordinates
+		// normalize vertices to screen coordinates and draw
 		for (int i = 0; i < 3; ++i) {
 			triangle[i] = normalize(triangle[i]);
 		}
-		draw_triangle(triangle[0], triangle[1], triangle[2], face_color, image);
+		draw_triangle(triangle[0], triangle[1], triangle[2], face_color, image, zbuffer);
 	}
+
+	delete[] zbuffer;
 }
 
 int main(int argc, char* argv[]) {
-
-	TGAImage image(WIDTH, HEIGHT, TGAImage::RGB);
+	// construct output image
+	TGAImage scene(WIDTH, HEIGHT, TGAImage::RGB);
+	// load model
 	Model model("./african_head.obj");
-	draw_object(model, image);
-	image.flip_vertically(); // i want to have the origin at the left bottom corner of the image
-	image.write_tga_file("output.tga");
+	// draw points
+	draw_object(model, scene);
+	scene.flip_vertically(); // i want to have the origin at the left bottom corner of the image
+	scene.write_tga_file("output.tga");
 	return 0;
 }
