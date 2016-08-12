@@ -67,7 +67,7 @@ TGAColor get_color(Vec3f a, Vec3f b, Vec3f c) {
 	// now find the angle between the directional light and the normal (theta from here forwards)
 	double cos_theta = dot_product(n, light_source) / vector_magnitude(n, Vec3f(0,0,0)) * vector_magnitude(light_source, Vec3f(0,0,0));
 
-	double brightness = 255 * cos_theta;
+	int brightness = 255 * cos_theta;
 	double alpha;
 	// triangles that aren't getting hit by light get an alpha of 0
 	(brightness < 0) ? alpha = 0 : alpha = 255;
@@ -76,7 +76,7 @@ TGAColor get_color(Vec3f a, Vec3f b, Vec3f c) {
 }
 
 // draw the triangle described by vertices a b c onto the passed TGAImage
-void draw_triangle(Vec3f a, Vec3f b, Vec3f c, TGAColor color, TGAImage &image, double *zbuffer) {
+void draw_triangle(Vec3f a, Vec3f b, Vec3f c, TGAColor face_color, TGAImage &image, double *zbuffer, TGAImage &texture) {
 
 	Vec3f vertices[3] = {a, b, c};
 	// of the triangle's corner vertices, find the maxes and mins of x and y.
@@ -91,25 +91,32 @@ void draw_triangle(Vec3f a, Vec3f b, Vec3f c, TGAColor color, TGAImage &image, d
 	int y_min = std::round(*min_element(y_extrema.begin(), y_extrema.end()));
 
 	// if there is no light, we don't need to draw the triangle at all
-	if (color.a <= 0) return;
+	if (face_color.a <= 0) return;
 
 	// iterate over each point in the bounding box
 	for (int x = x_min; x < x_max + 1; ++x) {
 		for (int y = y_min; y < y_max + 1; ++y) {
 			Vec2i point(x, y);
-			// find the barycentric weight of each point in the bounding box
+			// find the barycentric weight point P within the triangle
 			Vec3f barycentric_weights = barycentric(point, a, b, c);
 			// if any of those barycentric weights is less 0, then the point isn't in the triangle
 			if (!(barycentric_weights.x < 0 || barycentric_weights.y < 0 || barycentric_weights.z < 0)) {
 				// draw the point if it's in the triangle & is of the lowest z value we've encountered
-				// so lazy
+				// (lazily) go from barycentric coordinates to cartesian ones
 				double z = 0;
-				z += vertices[0].z * barycentric_weights.x;
-				z += vertices[1].z * barycentric_weights.y;
-				z += vertices[2].z * barycentric_weights.z;
+				z += vertices[0].z * barycentric_weights.y;
+				z += vertices[1].z * barycentric_weights.z;
+				z += vertices[2].z * barycentric_weights.x;
 				if (zbuffer[x + y * WIDTH] < z) {
 					zbuffer[x + y * WIDTH] = z;
-					image.set(x, y, color);
+					TGAColor tex_color = texture.get(x, y);
+					TGAColor pixel_color(
+						(int)tex_color.r * (int)face_color.r / 255.0,
+						(int)tex_color.g * (int)face_color.r / 255.0,
+						(int)tex_color.b * (int)face_color.r / 255.0,
+						255
+					);
+					image.set(x, y, pixel_color);
 				}
 			}
 		}
@@ -118,12 +125,17 @@ void draw_triangle(Vec3f a, Vec3f b, Vec3f c, TGAColor color, TGAImage &image, d
 
 void draw_object(Model &m, TGAImage &image) {
 
-	// init our z buffer
+	// init our world z buffer
 	// it'll be using screen coordinates
   double *zbuffer = new double[WIDTH * HEIGHT];
-	for (int i=0; i<WIDTH*HEIGHT; i++) {
+	for (int i = 0; i < WIDTH * HEIGHT; i++) {
 		zbuffer[i] = 0;
 	}
+
+	// load texture .tga
+	TGAImage texture;
+	texture.read_tga_file("african_head_diffuse.tga");
+	texture.flip_vertically();
 
 	// for each of the object's faces (each triangle)
 	for (int i = 0; i < m.nfaces(); ++i) {
@@ -147,7 +159,7 @@ void draw_object(Model &m, TGAImage &image) {
 		for (int i = 0; i < 3; ++i) {
 			triangle[i] = normalize(triangle[i]);
 		}
-		draw_triangle(triangle[0], triangle[1], triangle[2], face_color, image, zbuffer);
+		draw_triangle(triangle[0], triangle[1], triangle[2], face_color, image, zbuffer, texture);
 	}
 
 	delete[] zbuffer;
@@ -156,8 +168,10 @@ void draw_object(Model &m, TGAImage &image) {
 int main(int argc, char* argv[]) {
 	// construct output image
 	TGAImage scene(WIDTH, HEIGHT, TGAImage::RGB);
-	// load model
+
+	// load model .obj
 	Model model("./african_head.obj");
+
 	// draw points
 	draw_object(model, scene);
 	scene.flip_vertically(); // i want to have the origin at the left bottom corner of the image
