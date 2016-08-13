@@ -20,13 +20,13 @@ const TGAColor GREEN = TGAColor(  0, 255,   0, 255);
 const TGAColor RED   = TGAColor(255,   0,   0, 255);
 const TGAColor TEAL  = TGAColor( 22, 255, 255, 255);
 
-const int SCALE  = 1024;
-const int WIDTH  = 1024;
-const int HEIGHT = 1024;
+const int SCALE  = 800;
+const int WIDTH  = 800;
+const int HEIGHT = 800;
 
 /*
- * returns barycentric coordinates (u, v, 1) of point P in triangle v0v1v2
- * this is memory leak, better delete that vec when you're done
+ * returns barycentric coordinates ( u, v, (1-u-v) ) of point P in triangle v0v1v2
+ *
  */
 Vec3f barycentric(Vec2i p, Vec3f v0, Vec3f v1, Vec3f v2) {
 
@@ -41,8 +41,8 @@ Vec3f barycentric(Vec2i p, Vec3f v0, Vec3f v1, Vec3f v2) {
 	Vec3f c(cross_product(a, b));
 
 	// the cross product vec = (u, v, 1), so now i have to transform it so that z actually equals 1
-	// let's return the vector: ( (1-u-v), u, v )
-	return Vec3f( (1 - c.x/c.z - c.y/c.z), c.x/c.z, c.y/c.z);
+	// let's return the vector: ( u, v, (1-u-v) )
+	return Vec3f( c.x/c.z, c.y/c.z, (1 - c.x/c.z - c.y/c.z));
 }
 
 // convert from world coordinates to screen coordinates
@@ -68,7 +68,7 @@ TGAColor get_color(Vec3f a, Vec3f b, Vec3f c) {
 	double cos_theta = dot_product(n, light_source) / vector_magnitude(n, Vec3f(0,0,0)) * vector_magnitude(light_source, Vec3f(0,0,0));
 
 	int brightness = 255 * cos_theta;
-	double alpha;
+	int alpha;
 	// triangles that aren't getting hit by light get an alpha of 0
 	(brightness < 0) ? alpha = 0 : alpha = 255;
 
@@ -102,14 +102,15 @@ void draw_triangle(Vec3f a, Vec3f b, Vec3f c, TGAColor face_color, TGAImage &ima
 			// if any of those barycentric weights is less 0, then the point isn't in the triangle
 			if (!(barycentric_weights.x < 0 || barycentric_weights.y < 0 || barycentric_weights.z < 0)) {
 				// draw the point if it's in the triangle & is of the lowest z value we've encountered
-				// (lazily) go from barycentric coordinates to cartesian ones
+				// (lazily) get the cartesian z coordinate for point (x, y) from the barycentric weights we calculated
 				double z = 0;
-				z += vertices[0].z * barycentric_weights.y;
-				z += vertices[1].z * barycentric_weights.z;
-				z += vertices[2].z * barycentric_weights.x;
+				z += vertices[0].z * barycentric_weights.x;
+				z += vertices[1].z * barycentric_weights.y;
+				z += vertices[2].z * barycentric_weights.z;
+				// check in with our z buffer
 				if (zbuffer[x + y * WIDTH] < z) {
 					zbuffer[x + y * WIDTH] = z;
-					TGAColor tex_color = texture.get(x, y);
+					TGAColor tex_color = texture.get(point.x*texture.get_width() / (double) WIDTH, point.y*texture.get_height() / (double) HEIGHT);
 					TGAColor pixel_color(
 						(int)tex_color.r * (int)face_color.r / 255.0,
 						(int)tex_color.g * (int)face_color.r / 255.0,
@@ -168,6 +169,13 @@ void draw_object(Model &m, TGAImage &image) {
 int main(int argc, char* argv[]) {
 	// construct output image
 	TGAImage scene(WIDTH, HEIGHT, TGAImage::RGB);
+
+	// add a background because the glare on my screen is fierce
+	for (int i = 0; i < WIDTH; ++i) {
+		for (int j = 0; j < HEIGHT; ++j) {
+			scene.set(i, j, TGAColor(200, 200, 200, 255));
+		}
+	}
 
 	// load model .obj
 	Model model("./african_head.obj");
