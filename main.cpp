@@ -142,7 +142,7 @@ void draw_object(Model &m, TGAImage &image) {
 	for (int i = 0; i < m.nfaces(); ++i) {
 
 		// a face is a vector of ints, copy it and SWIPE ITS VECS
-		std::vector<int> face = m.face(i);
+		std::vector<int> face = m.face_v(i);
 
 		// store raw triangle vertices in an array
 		Vec3f triangle[3];

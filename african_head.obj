@@ -1,3 +1,4 @@
+# List of geometric vertices, with (x,y,z[,w]) coordinates, w is optional and defaults to 1.0.
 v -0.000581696 -0.734665 -0.623267
 v 0.000283538 -1 0.286843
 v -0.117277 -0.973564 0.306907
@@ -1258,6 +1259,7 @@ v 0.172833 0.300014 0.41564
 v -0.171097 0.299996 0.415616
 # 1258 vertices
 
+# List of texture coordinates, in (u, v [,w]) coordinates, these will vary between 0 and 1, w is optional and defaults to 0.
 vt  0.532 0.923 0.000
 vt  0.535 0.917 0.000
 vt  0.542 0.923 0.000
@@ -2599,6 +2601,8 @@ vt  0.443 0.976 0.000
 vt  0.412 0.975 0.000
 # 1339 texture vertices
 
+
+# List of vertex normals in (x,y,z) form; normals might not be unit vectors.
 vn  0.001 0.482 -0.876
 vn  -0.001 0.661 0.751
 vn  0.136 0.595 0.792
@@ -3859,6 +3863,7 @@ vn  0.296 -0.070 0.953
 vn  -0.319 -0.065 0.946
 # 1258 vertex normals
 
+# Polygonal face element, g = group name, s 1 = enable smooth shading
 g head
 s 1
 f 24/1/24 25/2/25 26/3/26
@@ -6354,4 +6359,3 @@ f 1200/1246/1200 1220/1281/1220 1198/1247/1198
 f 1201/1249/1201 1200/1246/1200 1199/1245/1199
 f 1201/1249/1201 1202/1248/1202 1200/1246/1200
 # 2492 faces
-
