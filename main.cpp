@@ -76,9 +76,12 @@ TGAColor get_color(Vec3f a, Vec3f b, Vec3f c) {
 }
 
 // draw the triangle described by vertices a b c onto the passed TGAImage
-void draw_triangle(Vec3f a, Vec3f b, Vec3f c, TGAColor face_color, TGAImage &image, double *zbuffer, TGAImage &texture) {
+void draw_triangle(Vec3f v[], Vec3f vt[], TGAColor face_color, TGAImage &image, double *zbuffer, TGAImage &texture) {
 
-	Vec3f vertices[3] = {a, b, c};
+	Vec3f a = v[0];
+	Vec3f b = v[1];
+	Vec3f c = v[2];
+
 	// of the triangle's corner vertices, find the maxes and mins of x and y.
 	// those describe the bounding box
 	std::vector<float> x_extrema = {a.x, b.x, c.x};
@@ -104,19 +107,32 @@ void draw_triangle(Vec3f a, Vec3f b, Vec3f c, TGAColor face_color, TGAImage &ima
 				// draw the point if it's in the triangle & is of the lowest z value we've encountered
 				// (lazily) get the cartesian z coordinate for point (x, y) from the barycentric weights we calculated
 				double z = 0;
-				z += vertices[0].z * barycentric_weights.x;
-				z += vertices[1].z * barycentric_weights.y;
-				z += vertices[2].z * barycentric_weights.z;
+				z += a.z * barycentric_weights.x;
+				z += b.z * barycentric_weights.y;
+				z += c.z * barycentric_weights.z;
+				double x_t = 0;
+				x_t += x * vt[0].x; // x0 * u0
+				x_t += x * vt[1].x; // x1 * u1
+				double y_t = 0;
+				y_t += y * vt[0].y; // y0 * v0
+				y_t += y * vt[1].y; // y1 * v1
 				// check in with our z buffer
 				if (zbuffer[x + y * WIDTH] < z) {
+					// add our nwe highest z value
 					zbuffer[x + y * WIDTH] = z;
-					TGAColor tex_color = texture.get(point.x*texture.get_width() / (double) WIDTH, point.y*texture.get_height() / (double) HEIGHT);
+					// map a color from the texture to the pixel we're drawing
+					TGAColor tex_color = texture.get(
+						x_t*texture.get_width() / (double) WIDTH,
+						y_t*texture.get_height() / (double) HEIGHT
+					);
+					// apply shading
 					TGAColor pixel_color(
 						(int)tex_color.r * (int)face_color.r / 255.0,
 						(int)tex_color.g * (int)face_color.r / 255.0,
 						(int)tex_color.b * (int)face_color.r / 255.0,
 						255
 					);
+					// draw
 					image.set(x, y, pixel_color);
 				}
 			}
@@ -124,6 +140,13 @@ void draw_triangle(Vec3f a, Vec3f b, Vec3f c, TGAColor face_color, TGAImage &ima
 	}
 }
 
+
+/**
+ *
+ * read some files, call some functions ...
+ *
+ *
+ */
 void draw_object(Model &m, TGAImage &image) {
 
 	// init our world z buffer
@@ -141,26 +164,45 @@ void draw_object(Model &m, TGAImage &image) {
 	// for each of the object's faces (each triangle)
 	for (int i = 0; i < m.nfaces(); ++i) {
 
-		// a face is a vector of ints, copy it and SWIPE ITS VECS
-		std::vector<int> face = m.face_v(i);
-
-		// store raw triangle vertices in an array
-		Vec3f triangle[3];
+		// get the positional vertices of the triangle, stash them in an array
+		std::vector<int> face_v = m.face_v(i);
+		Vec3f position_vertices[3];
 		for (int i = 0; i < 3; ++i) {
-			triangle[i] = Vec3f(
-				m.vert(face[i]).x,
-				m.vert(face[i]).y,
-				m.vert(face[i]).z
+			position_vertices[i] = Vec3f(
+				m.vert(face_v[i]).x,
+				m.vert(face_v[i]).y,
+				m.vert(face_v[i]).z
 			);
 		}
-		// get the face's color
-		TGAColor face_color = get_color(triangle[0], triangle[1], triangle[2]);
+
+		/*
+		 * well I'M AN IDIOT
+		 * i'm reaching around in the (x,y,z) position verts here, instead of the texture verts.
+		 * next step: read in texture verts in model.cpp
+		 */
+
+		// do the same for that face's texture coordinates
+		// get the texture coordinates, pass them down
+		std::vector<int> face_vt = m.face_vt(i);
+		Vec3f texture_vertices[3];
+		for (int i = 0; i < 3; ++i) {
+			texture_vertices[i] = Vec3f(
+				m.vert(face_vt[i]).x,
+				m.vert(face_vt[i]).y,
+				m.vert(face_vt[i]).z
+			);
+		}
+		// hmm what if these are indices into the texture, rather than back into the obj
+		std::cout << texture_vertices[0].x << texture_vertices[0].y << texture_vertices[0].z << std::endl;
+
+		// get the face's color from lighting
+		TGAColor face_color = get_color(position_vertices[0], position_vertices[1], position_vertices[2]);
 
 		// normalize vertices to screen coordinates and draw
 		for (int i = 0; i < 3; ++i) {
-			triangle[i] = normalize(triangle[i]);
+			position_vertices[i] = normalize(position_vertices[i]);
 		}
-		draw_triangle(triangle[0], triangle[1], triangle[2], face_color, image, zbuffer, texture);
+		draw_triangle(position_vertices, texture_vertices, face_color, image, zbuffer, texture);
 	}
 
 	delete[] zbuffer;
