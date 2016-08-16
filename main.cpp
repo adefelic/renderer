@@ -55,10 +55,11 @@ Vec3f normalize(Vec3f triangle) {
 	);
 }
 
-// calculate the RGBA color for triangle abc
+// calculate the RGBA color for triangle abc, according to light
 TGAColor get_color(Vec3f a, Vec3f b, Vec3f c) {
 
 	// vector describing directional light source
+	// this is kinda broken
 	Vec3f light_source(0, 0, 1);
 
 	// gotta find the angle between the light source and a normal of the triangle
@@ -75,12 +76,15 @@ TGAColor get_color(Vec3f a, Vec3f b, Vec3f c) {
 	return TGAColor(brightness, brightness, brightness, alpha);
 }
 
-// draw the triangle described by vertices a b c onto the passed TGAImage
+// rasterize the triangle described by vertices a b c onto the passed TGAImage
 void draw_triangle(Vec3f v[], Vec3f vt[], TGAColor face_color, TGAImage &image, double *zbuffer, TGAImage &texture) {
 
 	Vec3f a = v[0];
 	Vec3f b = v[1];
 	Vec3f c = v[2];
+	Vec3f at = vt[0]; // .x = u, .y = v, .z = 0
+	Vec3f bt = vt[1];
+	Vec3f ct = vt[2];
 
 	// of the triangle's corner vertices, find the maxes and mins of x and y.
 	// those describe the bounding box
@@ -107,25 +111,36 @@ void draw_triangle(Vec3f v[], Vec3f vt[], TGAColor face_color, TGAImage &image, 
 				// draw the point if it's in the triangle & is of the lowest z value we've encountered
 				// (lazily) get the cartesian z coordinate for point (x, y) from the barycentric weights we calculated
 				double z = 0;
-				z += a.z * barycentric_weights.x;
-				z += b.z * barycentric_weights.y;
-				z += c.z * barycentric_weights.z;
+				z += a.z * barycentric_weights.x; // u
+				z += b.z * barycentric_weights.y; // v
+				z += c.z * barycentric_weights.z; // w
+
+
+				// okay
+				// we need to find a the point in (at, bt, ct) that corresponds with (a, b, c)
+				// we have: a, b, c, point p, at.uv, bt.uv, ct.uv
+
+				// the point p is now encoded as three barycentric weights
+				// use our point p to find the correct part the texture
 				double x_t = 0;
-				x_t += x * vt[0].x; // x0 * u0
-				x_t += x * vt[1].x; // x1 * u1
+				x_t += at.x * barycentric_weights.x;
+				x_t += bt.x * barycentric_weights.y;
+				x_t += ct.x * barycentric_weights.z;
 				double y_t = 0;
-				y_t += y * vt[0].y; // y0 * v0
-				y_t += y * vt[1].y; // y1 * v1
+				y_t += at.y * barycentric_weights.x;
+				y_t += bt.y * barycentric_weights.y;
+				y_t += ct.y * barycentric_weights.z;
+
 				// check in with our z buffer
 				if (zbuffer[x + y * WIDTH] < z) {
-					// add our nwe highest z value
+					// add our new highest z value
 					zbuffer[x + y * WIDTH] = z;
 					// map a color from the texture to the pixel we're drawing
 					TGAColor tex_color = texture.get(
-						x_t*texture.get_width() / (double) WIDTH,
-						y_t*texture.get_height() / (double) HEIGHT
+						x_t * (texture.get_width()),
+						y_t * (texture.get_height())
 					);
-					// apply shading
+					// THROW SHADE *snap* *snap* *snap*
 					TGAColor pixel_color(
 						(int)tex_color.r * (int)face_color.r / 255.0,
 						(int)tex_color.g * (int)face_color.r / 255.0,
@@ -142,9 +157,6 @@ void draw_triangle(Vec3f v[], Vec3f vt[], TGAColor face_color, TGAImage &image, 
 
 
 /**
- *
- * read some files, call some functions ...
- *
  *
  */
 void draw_object(Model &m, TGAImage &image) {
@@ -164,36 +176,23 @@ void draw_object(Model &m, TGAImage &image) {
 	// for each of the object's faces (each triangle)
 	for (int i = 0; i < m.nfaces(); ++i) {
 
-		// get the positional vertices of the triangle, stash them in an array
-		std::vector<int> face_v = m.face_v(i);
+		// get the positional and texture vertices of the triangle
+		std::vector<int> face_v = m.face_v(i);   // 3 3d position vertices (x, y, z)
+		std::vector<int> face_vt = m.face_vt(i); // 3 2d texture vertices
 		Vec3f position_vertices[3];
+		Vec3f texture_vertices[3];
 		for (int i = 0; i < 3; ++i) {
 			position_vertices[i] = Vec3f(
 				m.vert(face_v[i]).x,
 				m.vert(face_v[i]).y,
 				m.vert(face_v[i]).z
 			);
-		}
-
-		/*
-		 * well I'M AN IDIOT
-		 * i'm reaching around in the (x,y,z) position verts here, instead of the texture verts.
-		 * next step: read in texture verts in model.cpp
-		 */
-
-		// do the same for that face's texture coordinates
-		// get the texture coordinates, pass them down
-		std::vector<int> face_vt = m.face_vt(i);
-		Vec3f texture_vertices[3];
-		for (int i = 0; i < 3; ++i) {
 			texture_vertices[i] = Vec3f(
-				m.vert(face_vt[i]).x,
-				m.vert(face_vt[i]).y,
-				m.vert(face_vt[i]).z
+				m.vert_t(face_vt[i]).x,
+				m.vert_t(face_vt[i]).y,
+				m.vert_t(face_vt[i]).z
 			);
 		}
-		// hmm what if these are indices into the texture, rather than back into the obj
-		std::cout << texture_vertices[0].x << texture_vertices[0].y << texture_vertices[0].z << std::endl;
 
 		// get the face's color from lighting
 		TGAColor face_color = get_color(position_vertices[0], position_vertices[1], position_vertices[2]);
