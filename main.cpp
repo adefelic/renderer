@@ -35,9 +35,8 @@ Vec3f convert_to_screen_coords(Vec3f point) {
 	double y = point.y / (1 - point.z/c);
 	double z = point.z / (1 - point.z/c);
 
-	// normalize badly
-	// TODO: ^
-	int scale = 800;
+
+	int scale = std::sqrt(AREA);
 	return Vec3f(
 		(x+1.0)*scale/2,
 		(y+1.0)*scale/2,
@@ -49,9 +48,10 @@ Vec3f convert_to_screen_coords(Vec3f point) {
 TGAColor get_illumination(Face &face) {
 
 	// vector describing directional light source
-	// this is maybe broken?
+	// this is totally broken
 	auto light_source = Vec3f(0, 0, 1);
 
+	// TODO: I don't think i'm calculating normals well
 	auto n = Vec3f(face.get_normal());
 
 	// now find the angle between the directional light and the normal (theta from here forwards)
@@ -151,7 +151,9 @@ void draw_model(Model &m, TGAImage &texture, TGAImage &image) {
 	// TODO: Models, as declared in model.h, do not have an iterable face collection :(
 	for (auto i = 0; i < m.nfaces(); ++i) {
 		auto face = m.get_face(i);
-		draw_face(face->get_vertices(), face->get_texture_coordinates(), get_illumination(*face), image, zbuffer, texture);
+		auto illumination = get_illumination(*face);
+		if (illumination.r <= 0) continue;
+		draw_face(face->get_vertices(), face->get_texture_coordinates(), illumination, image, zbuffer, texture);
 	}
 }
 

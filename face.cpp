@@ -21,6 +21,7 @@ Face::Face(Model &m, int face_index) {
   }
 }
 
+// TODO: is this using right hand rule?
 Vec3f Face::get_normal() {
   // derive two vectors from our three vertices
   // the vectors are arbitrary
