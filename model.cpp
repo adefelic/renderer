@@ -7,10 +7,6 @@
 
 /**
  * Read in a .obj file
- *
- *
- *
- *
  */
 Model::Model(const char *filename) : verts_(), vfaces_() {
   std::ifstream in;
@@ -90,6 +86,7 @@ int Model::nfaces() {
   return (int)vfaces_.size();
 }
 
+// returns a vector of vertex position indices 
 std::vector<int> Model::face_v(int i) {
   return vfaces_[i];
 }
@@ -112,5 +109,9 @@ Vec3f Model::vert_t(int i) {
 
 Vec3f Model::vert_n(int i) {
   return verts_n_[i];
+}
+
+std::unique_ptr<Face> Model::get_face(int i) {
+  return std::make_unique<Face>(*this, i);
 }
 
