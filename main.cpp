@@ -9,6 +9,7 @@
 #include "tgaimage.h"
 #include "model.h"
 #include "util.h"
+#include "geometry.h"
 #include <cmath>
 #include <iostream>
 #include <vector>
@@ -35,7 +36,6 @@ Vec3f convert_to_screen_coords(Vec3f point) {
 	double y = point.y / (1 - point.z/c);
 	double z = point.z / (1 - point.z/c);
 
-
 	int scale = std::sqrt(AREA);
 	return Vec3f(
 		(x+1.0)*scale/2,
@@ -44,32 +44,40 @@ Vec3f convert_to_screen_coords(Vec3f point) {
 	);
 }
 
-// calculate the RGBA color for triangle abc, according to light
-TGAColor get_illumination(Face &face) {
+// calculate the RGBA illumination for normal n, according to directional light
+// BUG?: this operation ignores occlusion by other faces!
+TGAColor get_illumination(Vec3f &normal, Vec3f &light_source) {
 
-	// vector describing directional light source
-	// this is totally broken
-	auto light_source = Vec3f(0, 0, 1);
-
-	// TODO: I don't think i'm calculating normals well
-	auto n = Vec3f(face.get_normal());
+	auto n = normal.normalize();
+	auto l = light_source.normalize();
 
 	// now find the angle between the directional light and the normal (theta from here forwards)
-	auto cos_theta = dot_product(n, light_source) / vector_magnitude(n, Vec3f(0,0,0)) * vector_magnitude(light_source, Vec3f(0,0,0));
+	auto cos_theta = dot_product(n, l) / vector_magnitude(n, Vec3f(0,0,0)) * vector_magnitude(l, Vec3f(0,0,0));
 
-	int brightness = 255 * cos_theta;
+	// cos_theta will be between -1.0 and 1.0
+	auto brightness = 255 * (pow((1+cos_theta)/2, 0.95));
 	return TGAColor(brightness, brightness, brightness, 255);
 }
 
+/*
+	TGAColor get_pixel_illumination(Vec3f vertex_normal){
+		return TGAColor(0,0,0,0);
+	}
+*/
 // rasterize the triangle described by vertices a b c onto the passed TGAImage
-void draw_face(const std::vector<Vec3f> &v, const std::vector<Vec2f> &vt, TGAColor face_color, TGAImage &image, std::array<double, AREA> &zbuffer, TGAImage &texture) {
+void draw_face(Face &face, TGAImage &image, std::array<double, AREA> &zbuffer, TGAImage &texture, Vec3f &light_source) {
 
-	auto a = convert_to_screen_coords(v[0]);
-	auto b = convert_to_screen_coords(v[1]);
-	auto c = convert_to_screen_coords(v[2]);
-	auto at = vt[0];
-	auto bt = vt[1];
-	auto ct = vt[2];
+	auto a = convert_to_screen_coords(face.get_vertices()[0].get_position());
+	auto b = convert_to_screen_coords(face.get_vertices()[1].get_position());
+	auto c = convert_to_screen_coords(face.get_vertices()[2].get_position());
+
+	auto at = face.get_vertices()[0].get_texture_coordinates();
+	auto bt = face.get_vertices()[1].get_texture_coordinates();
+	auto ct = face.get_vertices()[2].get_texture_coordinates();
+
+	auto an = face.get_vertices()[0].get_normal();
+	auto bn = face.get_vertices()[0].get_normal();
+	auto cn = face.get_vertices()[0].get_normal();
 
 	// of the triangle's corner vertices, find the maxes and mins of x and y.
 	// those describe the bounding box
@@ -125,11 +133,20 @@ void draw_face(const std::vector<Vec3f> &v, const std::vector<Vec2f> &vt, TGACol
 						x_t * (texture.get_width()),
 						y_t * (texture.get_height())
 					);
+
 					// shade
+					// find the pixel's normal (ratio btwn three vertex normals) and interp lighting
+					auto fragment_normal = (an + bn) * barycentric_weights.x;
+					fragment_normal = fragment_normal + (bn + cn) * barycentric_weights.y;
+					fragment_normal = fragment_normal + (cn + an) * barycentric_weights.z;
+
+					auto fragment_illumination = get_illumination(fragment_normal, light_source);
+
+					// interpolate texel color w/ face color via lighting
 					TGAColor pixel_color(
-						(int)tex_color.r * (int)face_color.r / 255.0,
-						(int)tex_color.g * (int)face_color.r / 255.0,
-						(int)tex_color.b * (int)face_color.r / 255.0,
+						(int)tex_color.r * (int)fragment_illumination.r / 255.0,
+						(int)tex_color.g * (int)fragment_illumination.g / 255.0,
+						(int)tex_color.b * (int)fragment_illumination.b / 255.0,
 						255
 					);
 					// draw
@@ -141,7 +158,7 @@ void draw_face(const std::vector<Vec3f> &v, const std::vector<Vec2f> &vt, TGACol
 }
 
 // draw a model to an image
-void draw_model(Model &m, TGAImage &texture, TGAImage &image) {
+void draw_model(Model &m, TGAImage &texture, TGAImage &image, Vec3f &light_source) {
 
 	// init z buffer
   std::array<double, AREA> zbuffer{};
@@ -150,15 +167,17 @@ void draw_model(Model &m, TGAImage &texture, TGAImage &image) {
 	// for each face
 	// TODO: Models, as declared in model.h, do not have an iterable face collection :(
 	for (auto i = 0; i < m.nfaces(); ++i) {
-		auto face = m.get_face(i);
-		auto illumination = get_illumination(*face);
-		if (illumination.r <= 0) continue;
-		draw_face(face->get_vertices(), face->get_texture_coordinates(), illumination, image, zbuffer, texture);
+		draw_face(*(m.get_face(i)), image, zbuffer, texture, light_source);
 	}
 }
 
 // render an image
 int main(int argc, char* argv[]) {
+
+	// create a light source
+	// points from here towards origin
+	// ignores occlusion
+	auto light_source = Vec3f(2.0, 1.0, 1.0);
 
 	// load model
 	// TODO: this boilerplate is not ideal, i should rewrite it
@@ -179,7 +198,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	// draw model to image
-	draw_model(model, texture, image);
+	draw_model(model, texture, image, light_source);
 
 	// write image to file
 	image.flip_vertically();

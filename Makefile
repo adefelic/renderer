@@ -1,4 +1,4 @@
-SYSCONF_LINK = g++
+SYSCONF_LINK = clang++
 CPPFLAGS     = -std=c++14
 LDFLAGS      =
 LIBS         = -stdlib=libc++
