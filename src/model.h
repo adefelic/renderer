@@ -5,18 +5,6 @@
 #include "geometry.h"
 #include "face.h"
 
-/*
-class Point {
-private:
-	Vec3f position;
-public:
-	Point(Vec3f v) : position(v) {};
-	double x(){ return position.x; };
-	double y(){ return position.y; };
-	double z(){ return position.z; };
-};
-*/
-
 class Face;
 
 // this has a small memory footprint which is nice but not fun to work with

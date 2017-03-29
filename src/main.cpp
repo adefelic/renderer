@@ -42,10 +42,10 @@ TGAColor get_illumination(Vec3f &normal, Vec3f &light_source) {
 	auto l = light_source.normalize();
 
 	// now find the angle between the directional light and the normal (theta from here forwards)
-	auto cos_theta = dot_product(n, l) / vector_magnitude(n, Vec3f(0, 0, 0)) * vector_magnitude(l, Vec3f(0, 0, 0));
+	auto cos_theta = dot_product(n, l) / vector_magnitude(n, Vec3f(0.0, 0.0, 0.0)) * vector_magnitude(l, Vec3f(0.0, 0.0, 0.0));
 
 	// cos_theta will be between -1.0 and 1.0
-	auto brightness = lround(255 * ((1 + cos_theta) / 2));
+	auto brightness = static_cast<unsigned char>(std::round(200 * ((1 + cos_theta) / 2)));
 	return TGAColor(brightness, brightness, brightness, 255);
 }
 
@@ -120,17 +120,21 @@ void draw_face(Face &face, TGAImage &image, std::unique_ptr<std::array<double, A
 
 					// shade
 					// find the pixel's normal (ratio btwn three vertex normals) and interp lighting
-					auto fragment_normal = (an + bn) * barycentric_weights.x;
-					fragment_normal = fragment_normal + (bn + cn) * barycentric_weights.y;
-					fragment_normal = fragment_normal + (cn + an) * barycentric_weights.z;
 
+					// calculate the distance between point (x,y) and the three face vertices for linear interp
+					auto ad = vector_magnitude(Vec3f(x, y, a.z), a);
+					auto bd = vector_magnitude(Vec3f(x, y, b.z), b);
+					auto cd = vector_magnitude(Vec3f(x, y, c.z), c);
+
+					// multiply vertex normals (xn) by (x,y)'s distance to those vertices
+					auto fragment_normal = an*((ad+bd+cd)/ad) + bn*((ad+bd+cd)/bd) + cn*((ad+bd+cd)/cd);
 					auto fragment_illumination = get_illumination(fragment_normal, light_source);
 
 					// interpolate texel color w/ fragment color from light
 					TGAColor pixel_color(
-						int(tex_color.r) * int(fragment_illumination.r) / 255,
-						int(tex_color.g) * int(fragment_illumination.g) / 255,
-						int(tex_color.b) * int(fragment_illumination.b) / 255,
+						static_cast<unsigned char>(tex_color.r * fragment_illumination.r / 255),
+						static_cast<unsigned char>(tex_color.g * fragment_illumination.g / 255),
+						static_cast<unsigned char>(tex_color.b * fragment_illumination.b / 255),
 						255
 					);
 					// draw
@@ -157,7 +161,9 @@ int main(int argc, char *argv[]) {
 	// create a light source
 	// points from here towards origin
 	// ignores occlusion
-	auto light_source = Vec3f(1.0, 0.0, 1.0);
+	// should make this a class
+	auto light_source = Vec3f(3.0, 0.0, 1.0);
+	//auto light_color = TGAColor(200, 200, 200);
 
 	// load model
 	// TODO: this boilerplate is not ideal, i should rewrite it
