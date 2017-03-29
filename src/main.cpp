@@ -9,18 +9,8 @@
 #include "tgaimage.h"
 #include "model.h"
 #include "util.h"
-#include "geometry.h"
-#include <cmath>
-#include <iostream>
-#include <vector>
 #include <array>
 #include <map>
-
-const TGAColor WHITE = TGAColor(255, 255, 255, 255);
-const TGAColor BLUE  = TGAColor(  0,   0, 255, 255);
-const TGAColor GREEN = TGAColor(  0, 255,   0, 255);
-const TGAColor RED   = TGAColor(255,   0,   0, 255);
-const TGAColor TEAL  = TGAColor( 22, 255, 255, 255);
 
 const auto WIDTH  = 800;
 const auto HEIGHT = 800;
@@ -29,14 +19,14 @@ const auto AREA = WIDTH*HEIGHT;
 // convert from world coordinates to screen coordinates
 // add 1 to each point to make all numbers positive, then scale by dimension
 Vec3f convert_to_screen_coords(Vec3f point) {
-	int c = 4; // camera's distance from the origin in the positive z direction
+	auto c = 4; // camera's distance from the origin in the positive z direction
 
 	// project onto the plane z=1
-	double x = point.x / (1 - point.z/c);
-	double y = point.y / (1 - point.z/c);
-	double z = point.z / (1 - point.z/c);
+	auto x = point.x / (1 - point.z/c);
+	auto y = point.y / (1 - point.z/c);
+	auto z = point.z / (1 - point.z/c);
 
-	int scale = std::sqrt(AREA);
+	auto scale = std::sqrt(AREA);
 	return Vec3f(
 		(x+1.0)*scale/2,
 		(y+1.0)*scale/2,
@@ -55,7 +45,7 @@ TGAColor get_illumination(Vec3f &normal, Vec3f &light_source) {
 	auto cos_theta = dot_product(n, l) / vector_magnitude(n, Vec3f(0,0,0)) * vector_magnitude(l, Vec3f(0,0,0));
 
 	// cos_theta will be between -1.0 and 1.0
-	auto brightness = 255 * (pow((1+cos_theta)/2, 0.95));
+	auto brightness = round(255 * (pow((1+cos_theta)/2, 0.95)));
 	return TGAColor(brightness, brightness, brightness, 255);
 }
 
@@ -181,11 +171,11 @@ int main(int argc, char* argv[]) {
 
 	// load model
 	// TODO: this boilerplate is not ideal, i should rewrite it
-	auto model = Model("./african_head.obj");
+	auto model = Model("../data/african_head.obj");
 
 	// load texture
 	auto texture = TGAImage();
-	texture.read_tga_file("african_head_diffuse.tga");
+	texture.read_tga_file("../data/african_head_diffuse.tga");
 	texture.flip_vertically();
 
 	// initialize output image
