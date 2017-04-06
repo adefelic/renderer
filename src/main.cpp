@@ -121,7 +121,8 @@ void draw_face(Face &face, TGAImage &image, std::unique_ptr<std::array<double, A
 					// shade
 					// find the pixel's normal (ratio btwn three vertex normals) and interp lighting
 
-					// calculate the distance between point (x,y) and the three face vertices for linear interp
+					// calculate the distance between point (x,y) and the three face vertices for linear interp\
+					// TODO: (a-b).norm , norm means length
 					auto ad = vector_magnitude(Vec3f(x, y, a.z), a);
 					auto bd = vector_magnitude(Vec3f(x, y, b.z), b);
 					auto cd = vector_magnitude(Vec3f(x, y, c.z), c);
