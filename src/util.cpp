@@ -1,11 +1,5 @@
 #include "util.h"
 
-// find the magnitude of the vector ab
-// assumes R3
-double vector_magnitude(Vec3f a, Vec3f b) {
-	return sqrt( pow(b.x-a.x, 2) + pow(b.y-a.y, 2) + pow(b.z-a.z, 2) );
-}
-
 Vec3f cross_product(Vec3f a, Vec3f b) {
 	return Vec3f(
 		a.y*b.z - a.z*b.y,

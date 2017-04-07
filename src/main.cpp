@@ -42,7 +42,7 @@ TGAColor get_illumination(Vec3f &normal, Vec3f &light_source) {
 	auto l = light_source.normalize();
 
 	// now find the angle between the directional light and the normal (theta from here forwards)
-	auto cos_theta = dot_product(n, l) / vector_magnitude(n, Vec3f(0.0, 0.0, 0.0)) * vector_magnitude(l, Vec3f(0.0, 0.0, 0.0));
+	auto cos_theta = dot_product(n, l) / n.norm() * l.norm();
 
 	// cos_theta will be between -1.0 and 1.0
 	auto brightness = static_cast<unsigned char>(std::round(200 * ((1 + cos_theta) / 2)));
@@ -52,14 +52,18 @@ TGAColor get_illumination(Vec3f &normal, Vec3f &light_source) {
 // rasterize the triangle described by vertices a b c onto the passed TGAImage
 void draw_face(Face &face, TGAImage &image, std::unique_ptr<std::array<double, AREA>> &zbuffer, TGAImage &texture, Vec3f &light_source) {
 
+	// (a, b, c) describes the position of the face's vertices
 	auto a = convert_to_screen_coordinates(face.get_vertices()[0].get_position());
 	auto b = convert_to_screen_coordinates(face.get_vertices()[1].get_position());
 	auto c = convert_to_screen_coordinates(face.get_vertices()[2].get_position());
 
+	// (at, bt, ct) describes the (u, v) position of each vertex's corresponding texel
 	auto at = face.get_vertices()[0].get_texture_coordinates();
 	auto bt = face.get_vertices()[1].get_texture_coordinates();
 	auto ct = face.get_vertices()[2].get_texture_coordinates();
 
+	// (an, bn, cn) describes the vertices normal's (if provided)
+	// we don't both calculating our own
 	auto an = face.get_vertices()[0].get_normal();
 	auto bn = face.get_vertices()[1].get_normal();
 	auto cn = face.get_vertices()[2].get_normal();
@@ -69,7 +73,8 @@ void draw_face(Face &face, TGAImage &image, std::unique_ptr<std::array<double, A
 	std::vector<float> x_extrema = {a.x, b.x, c.x};
 	std::vector<float> y_extrema = {a.y, b.y, c.y};
 
-	// this is where we go from floating point to integral
+	// this is where we go from floating point to integral,
+	// we find the integral bounding box that wraps the floating point vertices
 	auto x_max = static_cast<int>(std::round(*max_element(x_extrema.begin(), x_extrema.end())));
 	auto x_min = static_cast<int>(std::round(*min_element(x_extrema.begin(), x_extrema.end())));
 	auto y_max = static_cast<int>(std::round(*max_element(y_extrema.begin(), y_extrema.end())));
@@ -94,7 +99,7 @@ void draw_face(Face &face, TGAImage &image, std::unique_ptr<std::array<double, A
 				z += b.z * barycentric_weights.y; // v
 				z += c.z * barycentric_weights.z; // w
 
-				// we need to find a the point in (at, bt, ct) that corresponds with (a, b, c)
+				// we need to find a, the point in (at, bt, ct) that corresponds with (a, b, c)
 				// we have: a, b, c, point p, at.uv, bt.uv, ct.uv
 
 				// the point p is now encoded as three barycentric weights
@@ -121,11 +126,10 @@ void draw_face(Face &face, TGAImage &image, std::unique_ptr<std::array<double, A
 					// shade
 					// find the pixel's normal (ratio btwn three vertex normals) and interp lighting
 
-					// calculate the distance between point (x,y) and the three face vertices for linear interp\
-					// TODO: (a-b).norm , norm means length
-					auto ad = vector_magnitude(Vec3f(x, y, a.z), a);
-					auto bd = vector_magnitude(Vec3f(x, y, b.z), b);
-					auto cd = vector_magnitude(Vec3f(x, y, c.z), c);
+					// calculate the distance between point (x,y) and the three face vertices for linear interp
+					auto ad = (Vec3f(x, y, a.z) - a).norm();
+					auto bd = (Vec3f(x, y, b.z) - b).norm();
+					auto cd = (Vec3f(x, y, c.z) - c).norm();
 
 					// multiply vertex normals (xn) by (x,y)'s distance to those vertices
 					auto fragment_normal = an*((ad+bd+cd)/ad) + bn*((ad+bd+cd)/bd) + cn*((ad+bd+cd)/cd);
@@ -148,7 +152,6 @@ void draw_face(Face &face, TGAImage &image, std::unique_ptr<std::array<double, A
 
 // draw a model to an image
 void draw_model(Model &m, TGAImage &texture, TGAImage &image, std::unique_ptr<std::array<double, AREA>> &zbuffer, Vec3f &light_source) {
-
 	// for each face
 	// TODO: Models, as declared in model.h, do not have an iterable face collection :(
 	for (auto i = 0; i < m.nfaces(); ++i) {
@@ -183,7 +186,7 @@ int main(int argc, char *argv[]) {
 			image.set(i, j, TGAColor(200, 200, 200, 255));
 		}
 	}
-	// init z buffer
+	// init image z buffer
 	auto zbuffer = std::make_unique<std::array<double, AREA>>();
 	zbuffer->fill(0);
 
