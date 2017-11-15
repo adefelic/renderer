@@ -7,8 +7,11 @@ the model is not my own.
 
 here are some past progress screenshots; unfortunately I didn't capture any initial work, so the oldest screen is of a complete wireframe.
 
+shading fixed
+![fixed shading](doc/screens/2017-03-29.png)
+
 some naive gouroud fragment shading:
-![fragment shaded](doc/screens/2017-03-27_1.png)
+![broken shading](doc/screens/2017-03-27_1.png)
 
 perspective projection:
 ![projected](doc/screens/2017-03-27_2.png)
